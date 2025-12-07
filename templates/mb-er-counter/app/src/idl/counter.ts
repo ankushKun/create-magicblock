@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/counter.json`.
  */
 export type Counter = {
-  "address": "6EQW7yiKJZVZY2c9nejR5eESujYm3Ljqxm4fy3D3JsdY",
+  "address": "49NcALUBrB68LN1QpgfHB4G4TP6UJuyb7EG9QuwxcTVy",
   "metadata": {
     "name": "counter",
     "version": "0.1.0",
@@ -82,14 +82,20 @@ export type Counter = {
             "seeds": [
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "counter.authority",
+                "account": "counter"
               }
             ]
           }
         },
         {
-          "name": "authority",
+          "name": "signer",
+          "writable": true,
           "signer": true
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
         }
       ],
       "args": []
@@ -140,38 +146,38 @@ export type Counter = {
             "program": {
               "kind": "const",
               "value": [
-                77,
-                185,
-                143,
-                28,
-                148,
-                2,
-                136,
-                101,
-                97,
-                32,
-                33,
-                146,
-                38,
-                143,
-                184,
-                42,
-                102,
-                188,
-                133,
-                30,
-                181,
-                254,
-                69,
-                254,
-                53,
-                99,
-                60,
-                18,
-                44,
                 46,
+                184,
+                35,
+                50,
+                78,
+                226,
+                3,
+                191,
+                2,
+                246,
+                165,
+                73,
+                63,
                 200,
-                23
+                22,
+                153,
+                159,
+                179,
+                165,
+                246,
+                94,
+                59,
+                13,
+                158,
+                216,
+                187,
+                189,
+                105,
+                76,
+                41,
+                54,
+                96
               ]
             }
           }
@@ -261,7 +267,7 @@ export type Counter = {
         },
         {
           "name": "ownerProgram",
-          "address": "6EQW7yiKJZVZY2c9nejR5eESujYm3Ljqxm4fy3D3JsdY"
+          "address": "49NcALUBrB68LN1QpgfHB4G4TP6UJuyb7EG9QuwxcTVy"
         },
         {
           "name": "delegationProgram",
@@ -298,14 +304,20 @@ export type Counter = {
             "seeds": [
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "counter.authority",
+                "account": "counter"
               }
             ]
           }
         },
         {
-          "name": "authority",
+          "name": "signer",
+          "writable": true,
           "signer": true
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
         }
       ],
       "args": []
@@ -411,14 +423,20 @@ export type Counter = {
             "seeds": [
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "counter.authority",
+                "account": "counter"
               }
             ]
           }
         },
         {
-          "name": "authority",
+          "name": "signer",
+          "writable": true,
           "signer": true
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
         }
       ],
       "args": [
@@ -488,6 +506,19 @@ export type Counter = {
         124,
         25
       ]
+    },
+    {
+      "name": "sessionToken",
+      "discriminator": [
+        233,
+        4,
+        115,
+        14,
+        46,
+        21,
+        1,
+        15
+      ]
     }
   ],
   "errors": [
@@ -495,6 +526,11 @@ export type Counter = {
       "code": 6000,
       "name": "counterUnderflow",
       "msg": "Counter cannot go below zero"
+    },
+    {
+      "code": 6001,
+      "name": "invalidAuth",
+      "msg": "Invalid authentication"
     }
   ],
   "types": [
@@ -516,6 +552,30 @@ export type Counter = {
               "The authority who can update the counter"
             ],
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sessionToken",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "targetProgram",
+            "type": "pubkey"
+          },
+          {
+            "name": "sessionSigner",
+            "type": "pubkey"
+          },
+          {
+            "name": "validUntil",
+            "type": "i64"
           }
         ]
       }

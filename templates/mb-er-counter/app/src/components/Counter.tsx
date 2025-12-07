@@ -44,6 +44,10 @@ export function Counter() {
         delegationStatus,
         erCounterValue,
         checkDelegation,
+        createSession,
+        sessionToken,
+        isSessionLoading,
+        isDelegating,
     } = useCounterProgram();
 
     const [setValue, setSetValue] = useState("");
@@ -245,8 +249,21 @@ export function Counter() {
                                             disabled={isLoading || delegationStatus === "delegated"}
                                             className="col-span-2 bg-black text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            {isLoading && delegationStatus === "undelegated" ? "Delegating..." : "Delegate to ER"}
+                                            {isDelegating ? "Delegating..." : "Delegate to ER"}
                                         </Button>
+
+                                        {delegationStatus === "delegated" && !sessionToken && (
+                                            <Button
+                                                onClick={() => handleAction(async () => {
+                                                    await createSession();
+                                                    return "Session Created";
+                                                }, "Create Session")}
+                                                disabled={isSessionLoading || isLoading}
+                                                className="col-span-2 bg-gray-900 text-white border-2 border-gray-900"
+                                            >
+                                                {isSessionLoading ? "Creating Session..." : "Enable Seamless Mode ⚡"}
+                                            </Button>
+                                        )}
 
                                         <Button
                                             onClick={() => handleAction(commit, "Commit")}
@@ -265,6 +282,14 @@ export function Counter() {
                                         >
                                             Undelegate
                                         </Button>
+                                    </div>
+                                )}
+
+                                {sessionToken && delegationStatus === "delegated" && (
+                                    <div className="text-center">
+                                        <p className="text-xs text-green-600 font-medium">
+                                            ⚡ Seamless Mode Active
+                                        </p>
                                     </div>
                                 )}
 

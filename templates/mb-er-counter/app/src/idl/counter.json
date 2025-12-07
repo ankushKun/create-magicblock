@@ -1,5 +1,5 @@
 {
-  "address": "6EQW7yiKJZVZY2c9nejR5eESujYm3Ljqxm4fy3D3JsdY",
+  "address": "49NcALUBrB68LN1QpgfHB4G4TP6UJuyb7EG9QuwxcTVy",
   "metadata": {
     "name": "counter",
     "version": "0.1.0",
@@ -76,14 +76,20 @@
             "seeds": [
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "counter.authority",
+                "account": "Counter"
               }
             ]
           }
         },
         {
-          "name": "authority",
+          "name": "signer",
+          "writable": true,
           "signer": true
+        },
+        {
+          "name": "session_token",
+          "optional": true
         }
       ],
       "args": []
@@ -134,38 +140,38 @@
             "program": {
               "kind": "const",
               "value": [
-                77,
-                185,
-                143,
-                28,
-                148,
-                2,
-                136,
-                101,
-                97,
-                32,
-                33,
-                146,
-                38,
-                143,
-                184,
-                42,
-                102,
-                188,
-                133,
-                30,
-                181,
-                254,
-                69,
-                254,
-                53,
-                99,
-                60,
-                18,
-                44,
                 46,
+                184,
+                35,
+                50,
+                78,
+                226,
+                3,
+                191,
+                2,
+                246,
+                165,
+                73,
+                63,
                 200,
-                23
+                22,
+                153,
+                159,
+                179,
+                165,
+                246,
+                94,
+                59,
+                13,
+                158,
+                216,
+                187,
+                189,
+                105,
+                76,
+                41,
+                54,
+                96
               ]
             }
           }
@@ -255,7 +261,7 @@
         },
         {
           "name": "owner_program",
-          "address": "6EQW7yiKJZVZY2c9nejR5eESujYm3Ljqxm4fy3D3JsdY"
+          "address": "49NcALUBrB68LN1QpgfHB4G4TP6UJuyb7EG9QuwxcTVy"
         },
         {
           "name": "delegation_program",
@@ -292,14 +298,20 @@
             "seeds": [
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "counter.authority",
+                "account": "Counter"
               }
             ]
           }
         },
         {
-          "name": "authority",
+          "name": "signer",
+          "writable": true,
           "signer": true
+        },
+        {
+          "name": "session_token",
+          "optional": true
         }
       ],
       "args": []
@@ -405,14 +417,20 @@
             "seeds": [
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "counter.authority",
+                "account": "Counter"
               }
             ]
           }
         },
         {
-          "name": "authority",
+          "name": "signer",
+          "writable": true,
           "signer": true
+        },
+        {
+          "name": "session_token",
+          "optional": true
         }
       ],
       "args": [
@@ -482,6 +500,19 @@
         124,
         25
       ]
+    },
+    {
+      "name": "SessionToken",
+      "discriminator": [
+        233,
+        4,
+        115,
+        14,
+        46,
+        21,
+        1,
+        15
+      ]
     }
   ],
   "errors": [
@@ -489,6 +520,11 @@
       "code": 6000,
       "name": "CounterUnderflow",
       "msg": "Counter cannot go below zero"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidAuth",
+      "msg": "Invalid authentication"
     }
   ],
   "types": [
@@ -510,6 +546,30 @@
               "The authority who can update the counter"
             ],
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SessionToken",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "session_signer",
+            "type": "pubkey"
+          },
+          {
+            "name": "valid_until",
+            "type": "i64"
           }
         ]
       }

@@ -2,8 +2,9 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{commit_accounts, commit_and_undelegate_accounts};
+use session_keys::{session_auth_or, Session, SessionError, SessionToken};
 
-declare_id!("6EQW7yiKJZVZY2c9nejR5eESujYm3Ljqxm4fy3D3JsdY");
+declare_id!("49NcALUBrB68LN1QpgfHB4G4TP6UJuyb7EG9QuwxcTVy");
 
 #[ephemeral]
 #[program]
@@ -26,6 +27,10 @@ pub mod counter {
 
     /// Increment the counter by 1
     /// Wraps around to 0 if count exceeds 1000 (for demo purposes)
+    #[session_auth_or(
+        ctx.accounts.counter.authority.key() == ctx.accounts.signer.key(),
+        CounterError::InvalidAuth
+    )]
     pub fn increment(ctx: Context<Update>) -> Result<()> {
         let counter = &mut ctx.accounts.counter;
         counter.count = counter.count.checked_add(1).unwrap();
@@ -37,6 +42,10 @@ pub mod counter {
     }
 
     /// Decrement the counter by 1
+    #[session_auth_or(
+        ctx.accounts.counter.authority.key() == ctx.accounts.signer.key(),
+        CounterError::InvalidAuth
+    )]
     pub fn decrement(ctx: Context<Update>) -> Result<()> {
         let counter = &mut ctx.accounts.counter;
         require!(counter.count > 0, CounterError::CounterUnderflow);
@@ -46,6 +55,10 @@ pub mod counter {
     }
 
     /// Set the counter to a specific value
+    #[session_auth_or(
+        ctx.accounts.counter.authority.key() == ctx.accounts.signer.key(),
+        CounterError::InvalidAuth
+    )]
     pub fn set(ctx: Context<Update>, value: u64) -> Result<()> {
         let counter = &mut ctx.accounts.counter;
         counter.count = value;
@@ -119,16 +132,20 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
+#[derive(Accounts, Session)]
 pub struct Update<'info> {
     #[account(
         mut,
-        seeds = [authority.key().as_ref()],
+        seeds = [counter.authority.key().as_ref()],
         bump
     )]
     pub counter: Account<'info, Counter>,
 
-    pub authority: Signer<'info>,
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[session(signer = signer, authority = counter.authority.key())]
+    pub session_token: Option<Account<'info, SessionToken>>,
 }
 
 /// Account context for delegating the counter PDA
@@ -174,4 +191,6 @@ pub struct Counter {
 pub enum CounterError {
     #[msg("Counter cannot go below zero")]
     CounterUnderflow,
+    #[msg("Invalid authentication")]
+    InvalidAuth,
 }

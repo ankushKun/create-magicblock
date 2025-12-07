@@ -4,6 +4,7 @@ import { Program, AnchorProvider, BN, setProvider } from "@coral-xyz/anchor";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { type Counter } from "../idl/counter";
 import IDL from "../idl/counter.json";
+import { useSessionKeyManager } from "@magicblock-labs/gum-react-sdk";
 
 // Note: @magicblock-labs/ephemeral-rollups-sdk is imported dynamically to avoid
 // Buffer not defined errors during module initialization
@@ -37,6 +38,7 @@ export function useCounterProgram() {
 
     const [counterAccount, setCounterAccount] = useState<CounterAccount | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isDelegating, setIsDelegating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [delegationStatus, setDelegationStatus] = useState<DelegationStatus>("checking");
     const [erCounterValue, setErCounterValue] = useState<bigint | null>(null);
@@ -93,6 +95,20 @@ export function useCounterProgram() {
 
         return new Program<Counter>(IDL as Counter, erProvider);
     }, [erProvider]);
+
+    // Session Key Manager
+    // Session Key Manager
+    const sessionWallet = useSessionKeyManager(
+        wallet as any,
+        connection,
+        "devnet"
+    );
+
+    const { sessionToken, createSession: sdkCreateSession, isLoading: isSessionLoading } = sessionWallet;
+
+    const createSession = useCallback(async () => {
+        return await sdkCreateSession(new PublicKey(IDL.address));
+    }, [sdkCreateSession]);
 
     // Derive PDA from wallet public key
     const derivePDA = useCallback((authority: PublicKey) => {
@@ -286,8 +302,10 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .increment()
                 .accounts({
-                    authority: wallet.publicKey,
-                })
+                    counter: counterPubkey,
+                    signer: wallet.publicKey,
+                    sessionToken: null,
+                } as any)
                 .rpc();
 
             return tx;
@@ -300,8 +318,10 @@ export function useCounterProgram() {
         }
     }, [program, wallet.publicKey, counterPubkey]);
 
-    // Increment the counter on Ephemeral Rollup
-    const incrementOnER = useCallback(async (): Promise<string> => {
+    const performErAction = useCallback(async (
+        methodBuilder: any,
+        actionName: string
+    ): Promise<string> => {
         if (!program || !erProvider || !wallet.publicKey || !counterPubkey) {
             throw new Error("Counter not initialized or not delegated");
         }
@@ -310,18 +330,40 @@ export function useCounterProgram() {
         setError(null);
 
         try {
-            // Build transaction using base program
-            let tx = await program.methods
-                .increment()
-                .accounts({
-                    authority: wallet.publicKey,
-                })
+            // Check if we have a valid session
+            const hasSession = sessionToken != null && sessionWallet != null;
+            const signer = hasSession ? sessionWallet.publicKey : wallet.publicKey;
+
+            // Build accounts
+            const accounts: any = {
+                counter: counterPubkey,
+                signer: signer,
+                sessionToken: hasSession ? sessionToken : null,
+            };
+
+            // Build transaction using base program structure but targeted at ER accounts
+            let tx = await methodBuilder
+                .accounts(accounts)
                 .transaction();
 
             // Set up for ER connection
             tx.feePayer = wallet.publicKey;
             tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
-            tx = await erProvider.wallet.signTransaction(tx);
+
+            if (hasSession && sessionWallet && sessionWallet.signTransaction) {
+                // If using session, session wallet signs
+                // But who pays for fees? wallet.publicKey is feePayer.
+                // If wallet.publicKey is feePayer, it MUST sign.
+                // But we want to avoid main wallet popup.
+                // So feePayer should be sessionWallet?
+                // Session keys usually have some SOL topup.
+                // "createSession" usually tops up.
+                // So let's try using sessionWallet as feePayer.
+                tx.feePayer = sessionWallet.publicKey;
+                tx = await sessionWallet.signTransaction(tx);
+            } else {
+                tx = await erProvider.wallet.signTransaction(tx);
+            }
 
             // Send using raw connection
             const txHash = await erConnection.sendRawTransaction(tx.serialize(), {
@@ -341,111 +383,31 @@ export function useCounterProgram() {
 
             return txHash;
         } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to increment on ER";
+            const message = err instanceof Error ? err.message : `Failed to ${actionName} on ER`;
             setError(message);
             throw err;
         } finally {
             setIsLoading(false);
         }
-    }, [program, erProvider, erConnection, erProgram, wallet.publicKey, counterPubkey]);
+    }, [program, erProvider, erConnection, erProgram, wallet.publicKey, counterPubkey, sessionToken, sessionWallet]);
+
+    // Increment the counter on Ephemeral Rollup
+    const incrementOnER = useCallback(async (): Promise<string> => {
+        if (!program) throw new Error("Program not loaded");
+        return performErAction(program.methods.increment(), "increment");
+    }, [program, performErAction]);
 
     // Decrement the counter on Ephemeral Rollup
     const decrementOnER = useCallback(async (): Promise<string> => {
-        if (!program || !erProvider || !wallet.publicKey || !counterPubkey) {
-            throw new Error("Counter not initialized or not delegated");
-        }
-
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            // Build transaction using base program
-            let tx = await program.methods
-                .decrement()
-                .accounts({
-                    authority: wallet.publicKey,
-                })
-                .transaction();
-
-            // Set up for ER connection
-            tx.feePayer = wallet.publicKey;
-            tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
-            tx = await erProvider.wallet.signTransaction(tx);
-
-            // Send using raw connection
-            const txHash = await erConnection.sendRawTransaction(tx.serialize(), {
-                skipPreflight: true,
-            });
-            await erConnection.confirmTransaction(txHash, "confirmed");
-
-            // Refresh ER counter value
-            if (erProgram) {
-                try {
-                    const account = await erProgram.account.counter.fetch(counterPubkey);
-                    setErCounterValue(BigInt(account.count.toString()));
-                } catch {
-                    // Ignore fetch errors
-                }
-            }
-
-            return txHash;
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to decrement on ER";
-            setError(message);
-            throw err;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [program, erProvider, erConnection, erProgram, wallet.publicKey, counterPubkey]);
+        if (!program) throw new Error("Program not loaded");
+        return performErAction(program.methods.decrement(), "decrement");
+    }, [program, performErAction]);
 
     // Set the counter to a specific value on Ephemeral Rollup
     const setOnER = useCallback(async (value: number): Promise<string> => {
-        if (!program || !erProvider || !wallet.publicKey || !counterPubkey) {
-            throw new Error("Counter not initialized or not delegated");
-        }
-
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            // Build transaction using base program
-            let tx = await program.methods
-                .set(new BN(value))
-                .accounts({
-                    authority: wallet.publicKey,
-                })
-                .transaction();
-
-            // Set up for ER connection
-            tx.feePayer = wallet.publicKey;
-            tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
-            tx = await erProvider.wallet.signTransaction(tx);
-
-            // Send using raw connection
-            const txHash = await erConnection.sendRawTransaction(tx.serialize(), {
-                skipPreflight: true,
-            });
-            await erConnection.confirmTransaction(txHash, "confirmed");
-
-            // Refresh ER counter value
-            if (erProgram) {
-                try {
-                    const account = await erProgram.account.counter.fetch(counterPubkey);
-                    setErCounterValue(BigInt(account.count.toString()));
-                } catch {
-                    // Ignore fetch errors
-                }
-            }
-
-            return txHash;
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to set on ER";
-            setError(message);
-            throw err;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [program, erProvider, erConnection, erProgram, wallet.publicKey, counterPubkey]);
+        if (!program) throw new Error("Program not loaded");
+        return performErAction(program.methods.set(new BN(value)), "set");
+    }, [program, performErAction]);
 
     // Decrement the counter (on base layer)
     const decrement = useCallback(async (): Promise<string> => {
@@ -460,8 +422,10 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .decrement()
                 .accounts({
-                    authority: wallet.publicKey,
-                })
+                    counter: counterPubkey,
+                    signer: wallet.publicKey,
+                    sessionToken: null,
+                } as any)
                 .rpc();
 
             return tx;
@@ -487,8 +451,10 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .set(new BN(value))
                 .accounts({
-                    authority: wallet.publicKey,
-                })
+                    counter: counterPubkey,
+                    signer: wallet.publicKey,
+                    sessionToken: null,
+                } as any)
                 .rpc();
 
             return tx;
@@ -512,6 +478,7 @@ export function useCounterProgram() {
         }
 
         setIsLoading(true);
+        setIsDelegating(true);
         setError(null);
 
         try {
@@ -537,6 +504,7 @@ export function useCounterProgram() {
             throw err;
         } finally {
             setIsLoading(false);
+            setIsDelegating(false);
         }
     }, [program, wallet.publicKey, checkDelegationStatus]);
 
@@ -646,6 +614,7 @@ export function useCounterProgram() {
         counterAccount,
         counterPubkey,
         isLoading,
+        isDelegating,
         error,
         // Base layer operations
         initialize,
@@ -665,5 +634,9 @@ export function useCounterProgram() {
         // Utilities
         refetch: fetchCounterAccount,
         checkDelegation: checkDelegationStatus,
+        // Session
+        createSession,
+        sessionToken,
+        isSessionLoading,
     };
-}
+};
