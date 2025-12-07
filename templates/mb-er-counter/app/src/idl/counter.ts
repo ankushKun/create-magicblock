@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/counter.json`.
  */
 export type Counter = {
-  "address": "88r6G5MT3KoV4uAYG31oZTpXcsyRado1Q2wntuLyCD3B",
+  "address": "6EQW7yiKJZVZY2c9nejR5eESujYm3Ljqxm4fy3D3JsdY",
   "metadata": {
     "name": "counter",
     "version": "0.1.0",
@@ -13,6 +13,52 @@ export type Counter = {
     "description": "Created with Anchor"
   },
   "instructions": [
+    {
+      "name": "commit",
+      "docs": [
+        "Manual commit the counter account in the Ephemeral Rollup",
+        "This persists the current state to the base layer"
+      ],
+      "discriminator": [
+        223,
+        140,
+        142,
+        165,
+        229,
+        208,
+        156,
+        74
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "counter",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "magicProgram",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magicContext",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
     {
       "name": "decrement",
       "docs": [
@@ -31,14 +77,199 @@ export type Counter = {
       "accounts": [
         {
           "name": "counter",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "authority",
-          "signer": true,
-          "relations": [
-            "counter"
-          ]
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "delegate",
+      "docs": [
+        "Delegate the counter account to the delegation program",
+        "Optionally set a specific validator from the first remaining account",
+        "See: https://docs.magicblock.gg/pages/get-started/how-integrate-your-program/local-setup"
+      ],
+      "discriminator": [
+        90,
+        147,
+        75,
+        178,
+        85,
+        88,
+        4,
+        137
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "signer": true
+        },
+        {
+          "name": "bufferPda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pda"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                77,
+                185,
+                143,
+                28,
+                148,
+                2,
+                136,
+                101,
+                97,
+                32,
+                33,
+                146,
+                38,
+                143,
+                184,
+                42,
+                102,
+                188,
+                133,
+                30,
+                181,
+                254,
+                69,
+                254,
+                53,
+                99,
+                60,
+                18,
+                44,
+                46,
+                200,
+                23
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegationRecordPda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pda"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegationProgram"
+            }
+          }
+        },
+        {
+          "name": "delegationMetadataPda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pda"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegationProgram"
+            }
+          }
+        },
+        {
+          "name": "pda",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ownerProgram",
+          "address": "6EQW7yiKJZVZY2c9nejR5eESujYm3Ljqxm4fy3D3JsdY"
+        },
+        {
+          "name": "delegationProgram",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -46,7 +277,8 @@ export type Counter = {
     {
       "name": "increment",
       "docs": [
-        "Increment the counter by 1"
+        "Increment the counter by 1",
+        "Wraps around to 0 if count exceeds 1000 (for demo purposes)"
       ],
       "discriminator": [
         11,
@@ -61,14 +293,19 @@ export type Counter = {
       "accounts": [
         {
           "name": "counter",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "authority",
-          "signer": true,
-          "relations": [
-            "counter"
-          ]
+          "signer": true
         }
       ],
       "args": []
@@ -76,7 +313,8 @@ export type Counter = {
     {
       "name": "initialize",
       "docs": [
-        "Initialize a new counter account with count set to 0"
+        "Initialize a new counter account with count set to 0",
+        "Uses PDA derivation with user's public key for deterministic addresses"
       ],
       "discriminator": [
         175,
@@ -92,7 +330,14 @@ export type Counter = {
         {
           "name": "counter",
           "writable": true,
-          "signer": true
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "authority",
@@ -105,6 +350,43 @@ export type Counter = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "processUndelegation",
+      "discriminator": [
+        196,
+        28,
+        41,
+        206,
+        48,
+        37,
+        51,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "baseAccount",
+          "writable": true
+        },
+        {
+          "name": "buffer"
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "systemProgram"
+        }
+      ],
+      "args": [
+        {
+          "name": "accountSeeds",
+          "type": {
+            "vec": "bytes"
+          }
+        }
+      ]
     },
     {
       "name": "set",
@@ -124,14 +406,19 @@ export type Counter = {
       "accounts": [
         {
           "name": "counter",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "authority",
-          "signer": true,
-          "relations": [
-            "counter"
-          ]
+          "signer": true
         }
       ],
       "args": [
@@ -140,6 +427,52 @@ export type Counter = {
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "undelegate",
+      "docs": [
+        "Undelegate the counter account from the delegation program",
+        "This commits and removes the account from the Ephemeral Rollup"
+      ],
+      "discriminator": [
+        131,
+        148,
+        180,
+        198,
+        91,
+        104,
+        42,
+        238
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "counter",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "magicProgram",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magicContext",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
