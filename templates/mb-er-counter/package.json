@@ -2,11 +2,11 @@
   "license": "ISC",
   "type": "module",
   "scripts": {
-    "dev": "cd app && bun run dev",
-    "build:app": "cd app && bun run build",
-    "build:anchor": "./scripts/anchor-build.sh",
-    "test:anchor": "./scripts/anchor-test.sh",
-    "deploy:anchor": "./scripts/anchor-deploy.sh",
+    "frontend:dev": "cd app && bun run dev",
+    "frontend:build": "cd app && bun run build",
+    "program:build": "./scripts/anchor-build.sh",
+    "program:test": "sh ./scripts/anchor-test.sh",
+    "program:deploy": "sh ./scripts/anchor-deploy.sh",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w"
   },
