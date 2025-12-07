@@ -29,7 +29,7 @@ bun create magicblock@latest
 
 Ensure you have the following installed to run the generated projects:
 
-* Bun
+* Bun (frontend)
 * Rust + Cargo
 * Solana CLI
 * Anchor CLI
