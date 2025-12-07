@@ -221,3 +221,32 @@ export const initGitRepo = (targetDir: string) => {
         console.warn("   ⚠️ Failed to initialize git repository. You can do this manually later.");
     }
 }
+
+export const installDependencies = (targetDir: string, packageManager: PackageManagerInfo) => {
+    try {
+        console.log(`\n📦 Installing dependencies with ${packageManager.name}...`);
+
+        // Install in root
+        console.log(`   Running ${packageManager.installCommand} in root...`);
+        execSync(packageManager.installCommand, { cwd: targetDir, stdio: "inherit" });
+
+        // Install in app subdirectory if it exists
+        const appDir = path.join(targetDir, "app");
+        if (fs.existsSync(appDir) && fs.existsSync(path.join(appDir, "package.json"))) {
+            console.log(`   Running ${packageManager.installCommand} in app...`);
+            execSync(packageManager.installCommand, { cwd: appDir, stdio: "inherit" });
+        }
+
+    } catch (e) {
+        console.error(`\n❌ Failed to install dependencies. Please run '${packageManager.installCommand}' manually.`);
+    }
+}
+
+export const buildProgram = (targetDir: string, packageManager: PackageManagerInfo) => {
+    try {
+        console.log(`\n🛠️  Building program...`);
+        execSync(`${packageManager.runCommand} program:build`, { cwd: targetDir, stdio: "inherit" });
+    } catch (e) {
+        console.warn(`\n⚠️  Failed to build program. You can do this manually with '${packageManager.runCommand} program:build'.`);
+    }
+}

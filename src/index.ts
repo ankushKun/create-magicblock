@@ -12,7 +12,8 @@ import {
     cleanupLockFiles,
     checkDependencies,
     updateAnchorToml,
-    initGitRepo
+    initGitRepo,
+    installDependencies
 } from "./utils";
 
 async function main() {
@@ -95,12 +96,17 @@ async function main() {
 
         await initGitRepo(targetDir);
 
+        // Install dependencies
+        installDependencies(targetDir, packageManager);
+
         // Success message with package-manager-specific instructions
         console.log(`\n✅ Successfully created ${projectName}!\n`);
         console.log(`   Next steps:\n`);
         console.log(`   cd ${projectName}`);
-        console.log(`   ${packageManager.installCommand}`);
-        console.log(`   ${packageManager.runCommand} dev\n`);
+        console.log(`   ${packageManager.runCommand} frontend:dev\n`);
+        console.log(`   ${packageManager.runCommand} program:build`);
+        console.log(`   ${packageManager.runCommand} program:test` + `   (or ${packageManager.runCommand} program:test devnet)`);
+        console.log(`   ${packageManager.runCommand} program:deploy` + ` (or ${packageManager.runCommand} program:deploy devnet)`);
 
     } catch (err) {
         console.error("\n❌ An error occurred:", err);

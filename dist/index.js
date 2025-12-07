@@ -5103,6 +5103,22 @@ var initGitRepo = (targetDir) => {
     console.warn("   ⚠️ Failed to initialize git repository. You can do this manually later.");
   }
 };
+var installDependencies = (targetDir, packageManager) => {
+  try {
+    console.log(`
+\uD83D\uDCE6 Installing dependencies with ${packageManager.name}...`);
+    console.log(`   Running ${packageManager.installCommand} in root...`);
+    execSync(packageManager.installCommand, { cwd: targetDir, stdio: "inherit" });
+    const appDir = path.join(targetDir, "app");
+    if (fs.existsSync(appDir) && fs.existsSync(path.join(appDir, "package.json"))) {
+      console.log(`   Running ${packageManager.installCommand} in app...`);
+      execSync(packageManager.installCommand, { cwd: appDir, stdio: "inherit" });
+    }
+  } catch (e) {
+    console.error(`
+❌ Failed to install dependencies. Please run '${packageManager.installCommand}' manually.`);
+  }
+};
 
 // src/index.ts
 async function main() {
@@ -5162,14 +5178,17 @@ async function main() {
     await updateAnchorToml(targetDir, packageManager);
     await cleanupLockFiles(targetDir, packageManager);
     await initGitRepo(targetDir);
+    installDependencies(targetDir, packageManager);
     console.log(`
 ✅ Successfully created ${projectName}!
 `);
     console.log(`   Next steps:
 `);
     console.log(`   cd ${projectName}`);
-    console.log(`   ${packageManager.installCommand}`);
-    console.log(`   ${packageManager.runCommand} dev
+    console.log(`   ${packageManager.runCommand} program:build`);
+    console.log(`   ${packageManager.runCommand} program:test` + `   (or ${packageManager.runCommand} program:test devnet)`);
+    console.log(`   ${packageManager.runCommand} program:deploy` + ` (or ${packageManager.runCommand} program:deploy devnet)`);
+    console.log(`   ${packageManager.runCommand} frontend:dev
 `);
   } catch (err) {
     console.error(`
