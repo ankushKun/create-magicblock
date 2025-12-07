@@ -29,6 +29,14 @@
     "url": "https://ankush.one"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ankushKun/create-magicblock.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ankushKun/create-magicblock/issues"
+  },
+  "homepage": "https://github.com/ankushKun/create-magicblock#readme",
   "devDependencies": {
     "@types/prompts": "^2.4.9",
     "prompts": "^2.4.2"
