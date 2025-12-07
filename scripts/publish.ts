@@ -89,7 +89,8 @@ async function main() {
 
         // 2. Run npm publish
         console.log("\n📦 Publishing...");
-        execSync("npm publish", { stdio: "inherit" });
+        const args = process.argv.slice(2).join(" ");
+        execSync(`npm publish ${args}`, { stdio: "inherit" });
 
     } catch (error) {
         console.error("\n❌ Publish failed:");
