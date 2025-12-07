@@ -7,19 +7,28 @@ pub mod counter {
     use super::*;
 
     /// Initialize a new counter account with count set to 0
+    /// Uses PDA derivation with user's public key for deterministic addresses
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let counter = &mut ctx.accounts.counter;
         counter.count = 0;
         counter.authority = ctx.accounts.authority.key();
-        msg!("Counter initialized with count: {}", counter.count);
+        msg!(
+            "PDA {} initialized with count: {}",
+            counter.key(),
+            counter.count
+        );
         Ok(())
     }
 
     /// Increment the counter by 1
+    /// Wraps around to 0 if count exceeds 1000 (for demo purposes)
     pub fn increment(ctx: Context<Update>) -> Result<()> {
         let counter = &mut ctx.accounts.counter;
         counter.count = counter.count.checked_add(1).unwrap();
-        msg!("Counter incremented to: {}", counter.count);
+        if counter.count > 1000 {
+            counter.count = 0;
+        }
+        msg!("PDA {} count: {}", counter.key(), counter.count);
         Ok(())
     }
 
@@ -28,7 +37,7 @@ pub mod counter {
         let counter = &mut ctx.accounts.counter;
         require!(counter.count > 0, CounterError::CounterUnderflow);
         counter.count = counter.count.checked_sub(1).unwrap();
-        msg!("Counter decremented to: {}", counter.count);
+        msg!("PDA {} count: {}", counter.key(), counter.count);
         Ok(())
     }
 
@@ -36,7 +45,7 @@ pub mod counter {
     pub fn set(ctx: Context<Update>, value: u64) -> Result<()> {
         let counter = &mut ctx.accounts.counter;
         counter.count = value;
-        msg!("Counter set to: {}", counter.count);
+        msg!("PDA {} count: {}", counter.key(), counter.count);
         Ok(())
     }
 }
@@ -46,7 +55,9 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = authority,
-        space = 8 + Counter::INIT_SPACE
+        space = 8 + Counter::INIT_SPACE,
+        seeds = [authority.key().as_ref()],
+        bump
     )]
     pub counter: Account<'info, Counter>,
 
@@ -60,7 +71,8 @@ pub struct Initialize<'info> {
 pub struct Update<'info> {
     #[account(
         mut,
-        has_one = authority
+        seeds = [authority.key().as_ref()],
+        bump
     )]
     pub counter: Account<'info, Counter>,
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Program, AnchorProvider, BN, setProvider } from "@coral-xyz/anchor";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { type Counter } from "../idl/counter";
 import IDL from "../idl/counter.json";
 
@@ -11,33 +11,19 @@ interface CounterAccount {
     authority: PublicKey;
 }
 
-// Local storage key for persisting counter pubkey
-const COUNTER_PUBKEY_STORAGE_KEY = "counter-pubkey";
-
 /**
  * Hook to interact with the Counter program on Solana.
+ * Each user has their own counter derived from their public key (PDA).
  * Provides real-time updates via WebSocket subscriptions.
  */
 export function useCounterProgram() {
     const { connection } = useConnection();
     const wallet = useWallet();
 
-    const [counterPubkey, setCounterPubkeyState] = useState<PublicKey | null>(() => {
-        if (typeof window !== "undefined") {
-            const stored = localStorage.getItem(COUNTER_PUBKEY_STORAGE_KEY);
-            if (stored) {
-                try {
-                    return new PublicKey(stored);
-                } catch {
-                    // Invalid pubkey, ignore
-                }
-            }
-        }
-        return null;
-    });
-
+    const [counterPubkey, setCounterPubkey] = useState<PublicKey | null>(null);
     const [counterAccount, setCounterAccount] = useState<CounterAccount | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isAccountChecked, setIsAccountChecked] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Create Anchor provider and program
@@ -61,22 +47,30 @@ export function useCounterProgram() {
         return new Program<Counter>(IDL as Counter, provider);
     }, [connection, wallet.publicKey, wallet.signTransaction, wallet.signAllTransactions]);
 
-    // Persist counter pubkey to localStorage
-    const setCounterPubkey = useCallback((pubkey: PublicKey | null) => {
-        setCounterPubkeyState(pubkey);
-        if (typeof window !== "undefined") {
-            if (pubkey) {
-                localStorage.setItem(COUNTER_PUBKEY_STORAGE_KEY, pubkey.toBase58());
-            } else {
-                localStorage.removeItem(COUNTER_PUBKEY_STORAGE_KEY);
-            }
-        }
+    // Derive PDA from wallet public key
+    const derivePDA = useCallback((authority: PublicKey) => {
+        const [pda] = PublicKey.findProgramAddressSync(
+            [authority.toBuffer()],
+            new PublicKey(IDL.address)
+        );
+        return pda;
     }, []);
+
+    // Auto-derive counter PDA when wallet connects
+    useEffect(() => {
+        if (wallet.publicKey) {
+            const pda = derivePDA(wallet.publicKey);
+            setCounterPubkey(pda);
+        } else {
+            setCounterPubkey(null);
+        }
+    }, [wallet.publicKey, derivePDA]);
 
     // Fetch counter account data
     const fetchCounterAccount = useCallback(async () => {
         if (!program || !counterPubkey) {
             setCounterAccount(null);
+            setIsAccountChecked(false);
             return;
         }
 
@@ -88,11 +82,15 @@ export function useCounterProgram() {
             });
             setError(null);
         } catch (err) {
-            console.error("Failed to fetch counter account:", err);
+            // This is expected when the counter hasn't been initialized yet
+            console.debug("Counter account not found (this is normal for new wallets):", err);
             setCounterAccount(null);
-            if (err instanceof Error && !err.message.includes("Account does not exist")) {
+            // Only set error for unexpected errors, not "account does not exist"
+            if (err instanceof Error && !err.message.includes("Account does not exist") && !err.message.includes("could not find account")) {
                 setError(err.message);
             }
+        } finally {
+            setIsAccountChecked(true);
         }
     }, [program, counterPubkey]);
 
@@ -126,7 +124,7 @@ export function useCounterProgram() {
         };
     }, [program, counterPubkey, connection, fetchCounterAccount]);
 
-    // Initialize a new counter
+    // Initialize a new counter (uses PDA derived from wallet)
     const initialize = useCallback(async (): Promise<string> => {
         if (!program || !wallet.publicKey) {
             throw new Error("Wallet not connected");
@@ -136,18 +134,15 @@ export function useCounterProgram() {
         setError(null);
 
         try {
-            const counterKeypair = Keypair.generate();
-
             const tx = await program.methods
                 .initialize()
                 .accounts({
-                    counter: counterKeypair.publicKey,
                     authority: wallet.publicKey,
                 })
-                .signers([counterKeypair])
                 .rpc();
 
-            setCounterPubkey(counterKeypair.publicKey);
+            // PDA is already set from wallet connection
+            await fetchCounterAccount();
             return tx;
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to initialize counter";
@@ -156,7 +151,7 @@ export function useCounterProgram() {
         } finally {
             setIsLoading(false);
         }
-    }, [program, wallet.publicKey, setCounterPubkey]);
+    }, [program, wallet.publicKey, fetchCounterAccount]);
 
     // Increment the counter
     const increment = useCallback(async (): Promise<string> => {
@@ -171,7 +166,7 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .increment()
                 .accounts({
-                    counter: counterPubkey,
+                    authority: wallet.publicKey,
                 })
                 .rpc();
 
@@ -198,7 +193,7 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .decrement()
                 .accounts({
-                    counter: counterPubkey,
+                    authority: wallet.publicKey,
                 })
                 .rpc();
 
@@ -225,7 +220,7 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .set(new BN(value))
                 .accounts({
-                    counter: counterPubkey,
+                    authority: wallet.publicKey,
                 })
                 .rpc();
 
@@ -244,12 +239,12 @@ export function useCounterProgram() {
         counterAccount,
         counterPubkey,
         isLoading,
+        isAccountChecked,
         error,
         initialize,
         increment,
         decrement,
         set,
-        setCounterPubkey,
         refetch: fetchCounterAccount,
     };
 }

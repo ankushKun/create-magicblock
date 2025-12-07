@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { PublicKey } from "@solana/web3.js";
 import { useCounterProgram } from "../hooks/use-counter-program";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -13,16 +11,15 @@ export function Counter() {
         counterAccount,
         counterPubkey,
         isLoading,
+        isAccountChecked,
         error,
         initialize,
         increment,
         decrement,
         set,
-        setCounterPubkey,
     } = useCounterProgram();
 
     const [setValue, setSetValue] = useState("");
-    const [loadCounterInput, setLoadCounterInput] = useState("");
     const [lastTxSignature, setLastTxSignature] = useState<string | null>(null);
 
     // Handle actions with tx signature tracking
@@ -44,17 +41,6 @@ export function Counter() {
         setSetValue("");
     };
 
-    // Handle loading an existing counter
-    const handleLoadCounter = () => {
-        try {
-            const pubkey = new PublicKey(loadCounterInput);
-            setCounterPubkey(pubkey);
-            setLoadCounterInput("");
-        } catch {
-            console.error("Invalid public key");
-        }
-    };
-
     // Get explorer URL
     const getExplorerUrl = (address: string, type: "address" | "tx" = "address") => {
         return `https://explorer.solana.com/${type}/${address}?cluster=devnet`;
@@ -62,16 +48,6 @@ export function Counter() {
 
     return (
         <div className="max-w-md mx-auto space-y-4">
-            {/* Wallet Connection */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Wallet</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <WalletMultiButton />
-                </CardContent>
-            </Card>
-
             {/* Not connected state */}
             {!connected || !publicKey ? (
                 <Card>
@@ -81,41 +57,37 @@ export function Counter() {
                         </p>
                     </CardContent>
                 </Card>
-            ) : !counterPubkey ? (
+            ) : !isAccountChecked ? (
+                /* Loading state while checking account */
+                <Card>
+                    <CardContent className="pt-6">
+                        <p className="text-center text-gray-500">
+                            Checking account...
+                        </p>
+                    </CardContent>
+                </Card>
+            ) : !counterAccount ? (
                 /* No counter initialized state */
                 <Card>
                     <CardHeader>
                         <CardTitle>Initialize Counter</CardTitle>
+                        {counterPubkey && (
+                            <p className="text-xs font-mono text-gray-500 break-all">
+                                PDA: {counterPubkey.toBase58()}
+                            </p>
+                        )}
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        <p className="text-sm text-gray-600">
+                            Each wallet has its own counter derived from your public key.
+                        </p>
                         <Button
                             onClick={() => handleAction(initialize, "Initialize")}
                             disabled={isLoading}
                             className="w-full"
                         >
-                            {isLoading ? "Creating..." : "Create New Counter"}
+                            {isLoading ? "Creating..." : "Initialize Counter"}
                         </Button>
-
-                        <div className="text-center text-sm text-gray-500">Or</div>
-
-                        <div className="space-y-2">
-                            <p className="text-sm text-gray-600">Load an existing counter:</p>
-                            <div className="flex gap-2">
-                                <Input
-                                    placeholder="Counter public key..."
-                                    value={loadCounterInput}
-                                    onChange={(e) => setLoadCounterInput(e.target.value)}
-                                    className="font-mono text-xs"
-                                />
-                                <Button
-                                    onClick={handleLoadCounter}
-                                    disabled={!loadCounterInput}
-                                    variant="outline"
-                                >
-                                    Load
-                                </Button>
-                            </div>
-                        </div>
 
                         {error && (
                             <div className="p-3 rounded bg-red-50 border border-red-200 text-red-600 text-sm">
@@ -130,14 +102,14 @@ export function Counter() {
                     <CardHeader>
                         <CardTitle>Counter</CardTitle>
                         <p className="text-xs font-mono text-gray-500 break-all">
-                            {counterPubkey.toBase58()}
+                            {counterPubkey?.toBase58()}
                         </p>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {/* Counter display */}
                         <div className="text-center py-4">
                             <div className="text-6xl font-bold">
-                                {counterAccount ? counterAccount.count.toString() : "..."}
+                                {counterAccount.count.toString()}
                             </div>
                             <p className="text-gray-500 mt-2">Current Count</p>
                         </div>
@@ -146,11 +118,11 @@ export function Counter() {
                         <div className="flex justify-center gap-4">
                             <Button
                                 onClick={() => handleAction(decrement, "Decrement")}
-                                disabled={isLoading || !counterAccount || counterAccount.count === 0n}
+                                disabled={isLoading || counterAccount.count === 0n}
                                 variant="outline"
                                 size="lg"
                             >
-                                -
+                                −
                             </Button>
                             <Button
                                 onClick={() => handleAction(increment, "Increment")}
@@ -180,15 +152,6 @@ export function Counter() {
                             </Button>
                         </div>
 
-                        {/* Reset button */}
-                        <Button
-                            onClick={() => setCounterPubkey(null)}
-                            variant="outline"
-                            className="w-full"
-                        >
-                            Use Different Counter
-                        </Button>
-
                         {/* Error display */}
                         {error && (
                             <div className="p-3 rounded bg-red-50 border border-red-200 text-red-600 text-sm">
@@ -206,7 +169,7 @@ export function Counter() {
                                     rel="noopener noreferrer"
                                     className="text-xs font-mono text-blue-600 hover:underline break-all"
                                 >
-                                    {lastTxSignature}
+                                    {lastTxSignature.slice(0, 20)}...{lastTxSignature.slice(-20)}
                                 </a>
                             </div>
                         )}

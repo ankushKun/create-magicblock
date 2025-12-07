@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/counter.json`.
  */
 export type Counter = {
-  "address": "88r6G5MT3KoV4uAYG31oZTpXcsyRado1Q2wntuLyCD3B",
+  "address": "Adryj75Zwpo8Au98xNsCwxdNZ7hY2SX1XeiMWJoVyJZK",
   "metadata": {
     "name": "counter",
     "version": "0.1.0",
@@ -31,14 +31,19 @@ export type Counter = {
       "accounts": [
         {
           "name": "counter",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "authority",
-          "signer": true,
-          "relations": [
-            "counter"
-          ]
+          "signer": true
         }
       ],
       "args": []
@@ -46,7 +51,8 @@ export type Counter = {
     {
       "name": "increment",
       "docs": [
-        "Increment the counter by 1"
+        "Increment the counter by 1",
+        "Wraps around to 0 if count exceeds 1000 (for demo purposes)"
       ],
       "discriminator": [
         11,
@@ -61,14 +67,19 @@ export type Counter = {
       "accounts": [
         {
           "name": "counter",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "authority",
-          "signer": true,
-          "relations": [
-            "counter"
-          ]
+          "signer": true
         }
       ],
       "args": []
@@ -76,7 +87,8 @@ export type Counter = {
     {
       "name": "initialize",
       "docs": [
-        "Initialize a new counter account with count set to 0"
+        "Initialize a new counter account with count set to 0",
+        "Uses PDA derivation with user's public key for deterministic addresses"
       ],
       "discriminator": [
         175,
@@ -92,7 +104,14 @@ export type Counter = {
         {
           "name": "counter",
           "writable": true,
-          "signer": true
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "authority",
@@ -124,14 +143,19 @@ export type Counter = {
       "accounts": [
         {
           "name": "counter",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "authority",
-          "signer": true,
-          "relations": [
-            "counter"
-          ]
+          "signer": true
         }
       ],
       "args": [
