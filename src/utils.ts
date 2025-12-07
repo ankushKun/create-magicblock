@@ -94,7 +94,8 @@ export const copyFilesAndDirectories = async (sourceDir: string, targetDir: stri
 
     for (const entry of entries) {
         const sourcePath = path.join(sourceDir, entry.name);
-        const targetPath = path.join(targetDir, entry.name);
+        const targetName = entry.name === "gitignore" ? ".gitignore" : entry.name;
+        const targetPath = path.join(targetDir, targetName);
 
         if (entry.isDirectory()) {
             // Recursively copy directory
@@ -207,4 +208,16 @@ export const checkDependencies = () => {
     }
 
     console.log()
+}
+
+export const initGitRepo = (targetDir: string) => {
+    try {
+        console.log(`\n🐙 Initializing git repository...`);
+        execSync("git init", { cwd: targetDir, stdio: "ignore" });
+        execSync("git add .", { cwd: targetDir, stdio: "ignore" });
+        execSync('git commit -m "init with create-magicblock"', { cwd: targetDir, stdio: "ignore" });
+        console.log("   Git repository initialized!");
+    } catch (e) {
+        console.warn("   ⚠️ Failed to initialize git repository. You can do this manually later.");
+    }
 }

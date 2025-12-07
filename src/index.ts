@@ -11,7 +11,8 @@ import {
     detectPackageManager,
     cleanupLockFiles,
     checkDependencies,
-    updateAnchorToml
+    updateAnchorToml,
+    initGitRepo
 } from "./utils";
 
 async function main() {
@@ -91,6 +92,8 @@ async function main() {
 
         // Clean up lockfiles from other package managers
         await cleanupLockFiles(targetDir, packageManager);
+
+        await initGitRepo(targetDir);
 
         // Success message with package-manager-specific instructions
         console.log(`\n✅ Successfully created ${projectName}!\n`);
