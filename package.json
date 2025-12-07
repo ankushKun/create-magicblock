@@ -12,8 +12,8 @@
     "build": "bun build src/index.ts --target node --outdir dist"
   },
   "files": [
-    "index.js",
-    "templates/*"
+    "dist",
+    "templates"
   ],
   "keywords": [
     "solana",
