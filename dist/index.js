@@ -4945,24 +4945,29 @@ import fs2 from "fs";
 // src/templates.ts
 var templates = [
   {
+    value: "regular-counter",
+    title: "Regular counter",
+    description: "Normal Solana Anchor counter program with frontend (no magicblock ER)"
+  },
+  {
     value: "mb-er-counter",
     title: "ER counter",
-    description: "Simple anchor counter program with MagicBlock ER and frontend already setup"
+    description: "Simple anchor counter program with magicblock ER and frontend"
   },
   {
     value: "mb-er-phaser",
     title: "ER Game",
-    description: "Phaser live multiplayer with MagicBlock ER"
+    description: "Phaser live multiplayer with magicblock ER"
   },
   {
     value: "mb-vrf",
     title: "Verifiable Randomness (coming soon)",
-    description: "On chain verifiable randomness with MagicBlock ER"
+    description: "On chain verifiable randomness with magicblock VRF"
   },
   {
     value: "mb-per",
     title: "Private ER (coming soon)",
-    description: "Private ER with MagicBlock"
+    description: "Private ER with magicblock PER"
   }
 ];
 
@@ -4997,20 +5002,7 @@ var PACKAGE_MANAGER_CONFIG = {
   }
 };
 var detectPackageManager = () => {
-  const userAgent = process.env.npm_config_user_agent;
-  if (!userAgent) {
-    return { ...PACKAGE_MANAGER_CONFIG.npm, version: "unknown" };
-  }
-  const match = userAgent.match(/^(npm|yarn|pnpm|bun)\/(\S+)/);
-  if (!match) {
-    return { ...PACKAGE_MANAGER_CONFIG.npm, version: "unknown" };
-  }
-  const [, name, version] = match;
-  const pmName = name;
-  return {
-    ...PACKAGE_MANAGER_CONFIG[pmName],
-    version
-  };
+  return { ...PACKAGE_MANAGER_CONFIG.bun, version: "latest" };
 };
 var copyFilesAndDirectories = async (sourceDir, targetDir) => {
   if (!fs.existsSync(sourceDir)) {

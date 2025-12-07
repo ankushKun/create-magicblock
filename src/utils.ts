@@ -50,27 +50,30 @@ const PACKAGE_MANAGER_CONFIG: Record<PackageManager, Omit<PackageManagerInfo, 'v
  * - bun/1.0.0 node/v20.10.0 darwin arm64
  */
 export const detectPackageManager = (): PackageManagerInfo => {
-    const userAgent = process.env.npm_config_user_agent;
+    // const userAgent = process.env.npm_config_user_agent;
 
-    if (!userAgent) {
-        // Default to npm if we can't detect
-        return { ...PACKAGE_MANAGER_CONFIG.npm, version: "unknown" };
-    }
+    // if (!userAgent) {
+    //     // Default to npm if we can't detect
+    //     return { ...PACKAGE_MANAGER_CONFIG.npm, version: "unknown" };
+    // }
 
-    // Parse the user agent string (format: "name/version ...")
-    const match = userAgent.match(/^(npm|yarn|pnpm|bun)\/(\S+)/);
+    // // Parse the user agent string (format: "name/version ...")
+    // const match = userAgent.match(/^(npm|yarn|pnpm|bun)\/(\S+)/);
 
-    if (!match) {
-        return { ...PACKAGE_MANAGER_CONFIG.npm, version: "unknown" };
-    }
+    // if (!match) {
+    //     return { ...PACKAGE_MANAGER_CONFIG.npm, version: "unknown" };
+    // }
 
-    const [, name, version] = match;
-    const pmName = name as PackageManager;
+    // const [, name, version] = match;
+    // const pmName = name as PackageManager;
 
-    return {
-        ...PACKAGE_MANAGER_CONFIG[pmName],
-        version
-    };
+    // return {
+    //     ...PACKAGE_MANAGER_CONFIG[pmName],
+    //     version
+    // };
+
+    // Always use bun, regardless of what package manager was used to run this command
+    return { ...PACKAGE_MANAGER_CONFIG.bun, version: "latest" };
 };
 
 /**
