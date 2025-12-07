@@ -1,0 +1,36 @@
+{
+  "name": "create-magic-app",
+  "version": "0.1.0",
+  "description": "Scaffold a solana and magicblock app",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "create-magic-app": "dist/index.js"
+  },
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "bun build src/index.ts --target node --outdir dist"
+  },
+  "files": [
+    "index.js",
+    "templates/*"
+  ],
+  "keywords": [
+    "solana",
+    "magicblock",
+    "ephemeral rollup",
+    "dapp",
+    "web3",
+    "anchor"
+  ],
+  "author": {
+    "name": "Ankush",
+    "email": "ankush4singh@gmail.com",
+    "url": "https://ankush.one"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/prompts": "^2.4.9",
+    "prompts": "^2.4.2"
+  }
+}

@@ -1,0 +1,6 @@
+.DS_Store
+bun.lock
+/*/package-lock.json
+/*/yarn.lock
+/*/pnpm-lock.yaml
+node_modules
