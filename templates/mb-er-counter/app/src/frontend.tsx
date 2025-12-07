@@ -5,14 +5,14 @@
  * It is included in `src/index.html`.
  */
 
+// IMPORTANT: Import polyfills first (side-effect import)
+// This ensures Buffer is available before any other modules load
+import "./polyfills";
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Buffer } from "buffer";
 import { WalletProvider } from "./providers/wallet-provider";
 import { App } from "./App";
-
-// Polyfill Buffer for browser (required by Solana packages)
-window.Buffer = Buffer;
 
 const elem = document.getElementById("root")!;
 const app = (

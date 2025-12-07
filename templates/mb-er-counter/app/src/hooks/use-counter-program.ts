@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Program, AnchorProvider, BN, setProvider } from "@coral-xyz/anchor";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { type Counter } from "../idl/counter";
 import IDL from "../idl/counter.json";
+
+// Note: @magicblock-labs/ephemeral-rollups-sdk is imported dynamically to avoid
+// Buffer not defined errors during module initialization
 
 // Counter account data structure
 interface CounterAccount {
@@ -11,36 +14,34 @@ interface CounterAccount {
     authority: PublicKey;
 }
 
-// Local storage key for persisting counter pubkey
-const COUNTER_PUBKEY_STORAGE_KEY = "counter-pubkey";
+// Ephemeral Rollup endpoints - configurable via environment
+const ER_ENDPOINT = "https://devnet.magicblock.app";
+const ER_WS_ENDPOINT = "wss://devnet.magicblock.app";
+
+// Delegation status
+export type DelegationStatus = "undelegated" | "delegated" | "checking";
 
 /**
  * Hook to interact with the Counter program on Solana.
  * Provides real-time updates via WebSocket subscriptions.
+ * Supports MagicBlock Ephemeral Rollups for delegation, commit, and undelegation.
  */
 export function useCounterProgram() {
     const { connection } = useConnection();
     const wallet = useWallet();
 
     const [counterPubkey, setCounterPubkeyState] = useState<PublicKey | null>(() => {
-        if (typeof window !== "undefined") {
-            const stored = localStorage.getItem(COUNTER_PUBKEY_STORAGE_KEY);
-            if (stored) {
-                try {
-                    return new PublicKey(stored);
-                } catch {
-                    // Invalid pubkey, ignore
-                }
-            }
-        }
+        // Derive PDA from wallet public key if connected
         return null;
     });
 
     const [counterAccount, setCounterAccount] = useState<CounterAccount | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [delegationStatus, setDelegationStatus] = useState<DelegationStatus>("checking");
+    const [erCounterValue, setErCounterValue] = useState<bigint | null>(null);
 
-    // Create Anchor provider and program
+    // Base layer Anchor provider and program
     const program = useMemo(() => {
         if (!wallet.publicKey || !wallet.signTransaction || !wallet.signAllTransactions) {
             return null;
@@ -61,19 +62,58 @@ export function useCounterProgram() {
         return new Program<Counter>(IDL as Counter, provider);
     }, [connection, wallet.publicKey, wallet.signTransaction, wallet.signAllTransactions]);
 
-    // Persist counter pubkey to localStorage
-    const setCounterPubkey = useCallback((pubkey: PublicKey | null) => {
-        setCounterPubkeyState(pubkey);
-        if (typeof window !== "undefined") {
-            if (pubkey) {
-                localStorage.setItem(COUNTER_PUBKEY_STORAGE_KEY, pubkey.toBase58());
-            } else {
-                localStorage.removeItem(COUNTER_PUBKEY_STORAGE_KEY);
-            }
-        }
+    // Ephemeral Rollup connection and provider
+    const erConnection = useMemo(() => {
+        return new Connection(ER_ENDPOINT, {
+            wsEndpoint: ER_WS_ENDPOINT,
+            commitment: "confirmed",
+        });
     }, []);
 
-    // Fetch counter account data
+    const erProvider = useMemo(() => {
+        if (!wallet.publicKey || !wallet.signTransaction || !wallet.signAllTransactions) {
+            return null;
+        }
+
+        return new AnchorProvider(
+            erConnection,
+            {
+                publicKey: wallet.publicKey,
+                signTransaction: wallet.signTransaction,
+                signAllTransactions: wallet.signAllTransactions,
+            },
+            { commitment: "confirmed" }
+        );
+    }, [erConnection, wallet.publicKey, wallet.signTransaction, wallet.signAllTransactions]);
+
+    const erProgram = useMemo(() => {
+        if (!erProvider) {
+            return null;
+        }
+
+        return new Program<Counter>(IDL as Counter, erProvider);
+    }, [erProvider]);
+
+    // Derive PDA from wallet public key
+    const derivePDA = useCallback((authority: PublicKey) => {
+        const [pda] = PublicKey.findProgramAddressSync(
+            [authority.toBuffer()],
+            new PublicKey(IDL.address)
+        );
+        return pda;
+    }, []);
+
+    // Auto-derive counter PDA when wallet connects
+    useEffect(() => {
+        if (wallet.publicKey) {
+            const pda = derivePDA(wallet.publicKey);
+            setCounterPubkeyState(pda);
+        } else {
+            setCounterPubkeyState(null);
+        }
+    }, [wallet.publicKey, derivePDA]);
+
+    // Fetch counter account data from base layer
     const fetchCounterAccount = useCallback(async () => {
         if (!program || !counterPubkey) {
             setCounterAccount(null);
@@ -88,21 +128,73 @@ export function useCounterProgram() {
             });
             setError(null);
         } catch (err) {
-            console.error("Failed to fetch counter account:", err);
+            // This is expected when the counter hasn't been initialized yet
+            console.debug("Counter account not found (this is normal for new wallets):", err);
             setCounterAccount(null);
-            if (err instanceof Error && !err.message.includes("Account does not exist")) {
+            // Only set error for unexpected errors, not "account does not exist"
+            if (err instanceof Error && !err.message.includes("Account does not exist") && !err.message.includes("could not find account")) {
                 setError(err.message);
             }
         }
     }, [program, counterPubkey]);
 
-    // Subscribe to account changes via WebSocket
+    // Delegation Program address - when an account is delegated, its owner changes to this
+    const DELEGATION_PROGRAM_ID = new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
+
+    // Check if account is delegated by checking the account owner on base layer
+    const checkDelegationStatus = useCallback(async () => {
+        if (!counterPubkey) {
+            setDelegationStatus("checking");
+            return;
+        }
+
+        try {
+            setDelegationStatus("checking");
+
+            // Get account info from base layer to check the owner
+            const accountInfo = await connection.getAccountInfo(counterPubkey);
+
+            if (!accountInfo) {
+                // Account doesn't exist yet
+                setDelegationStatus("undelegated");
+                setErCounterValue(null);
+                return;
+            }
+
+            // Check if the account owner is the delegation program
+            const isDelegated = accountInfo.owner.equals(DELEGATION_PROGRAM_ID);
+
+            if (isDelegated) {
+                setDelegationStatus("delegated");
+                // Try to fetch the counter value from ER
+                if (erProgram) {
+                    try {
+                        const account = await erProgram.account.counter.fetch(counterPubkey);
+                        setErCounterValue(BigInt(account.count.toString()));
+                    } catch {
+                        // Couldn't fetch from ER, but it's still delegated
+                        console.debug("Couldn't fetch counter from ER");
+                    }
+                }
+            } else {
+                setDelegationStatus("undelegated");
+                setErCounterValue(null);
+            }
+        } catch (err) {
+            console.debug("Error checking delegation status:", err);
+            setDelegationStatus("undelegated");
+            setErCounterValue(null);
+        }
+    }, [counterPubkey, connection, erProgram]);
+
+    // Subscribe to base layer account changes via WebSocket
     useEffect(() => {
         if (!program || !counterPubkey) {
             return;
         }
 
         fetchCounterAccount();
+        checkDelegationStatus();
 
         const subscriptionId = connection.onAccountChange(
             counterPubkey,
@@ -114,6 +206,8 @@ export function useCounterProgram() {
                         authority: decoded.authority,
                     });
                     setError(null);
+                    // Recheck delegation status when base layer changes
+                    checkDelegationStatus();
                 } catch (err) {
                     console.error("Failed to decode account data:", err);
                 }
@@ -124,9 +218,33 @@ export function useCounterProgram() {
         return () => {
             connection.removeAccountChangeListener(subscriptionId);
         };
-    }, [program, counterPubkey, connection, fetchCounterAccount]);
+    }, [program, counterPubkey, connection, fetchCounterAccount, checkDelegationStatus]);
 
-    // Initialize a new counter
+    // Subscribe to ER account changes when delegated
+    useEffect(() => {
+        if (!erProgram || !counterPubkey || delegationStatus !== "delegated") {
+            return;
+        }
+
+        const subscriptionId = erConnection.onAccountChange(
+            counterPubkey,
+            async (accountInfo) => {
+                try {
+                    const decoded = erProgram.coder.accounts.decode("counter", accountInfo.data);
+                    setErCounterValue(BigInt(decoded.count.toString()));
+                } catch (err) {
+                    console.error("Failed to decode ER account data:", err);
+                }
+            },
+            "confirmed"
+        );
+
+        return () => {
+            erConnection.removeAccountChangeListener(subscriptionId);
+        };
+    }, [erProgram, counterPubkey, erConnection, delegationStatus]);
+
+    // Initialize a new counter (uses PDA derived from wallet)
     const initialize = useCallback(async (): Promise<string> => {
         if (!program || !wallet.publicKey) {
             throw new Error("Wallet not connected");
@@ -136,18 +254,15 @@ export function useCounterProgram() {
         setError(null);
 
         try {
-            const counterKeypair = Keypair.generate();
-
             const tx = await program.methods
                 .initialize()
                 .accounts({
-                    counter: counterKeypair.publicKey,
                     authority: wallet.publicKey,
                 })
-                .signers([counterKeypair])
                 .rpc();
 
-            setCounterPubkey(counterKeypair.publicKey);
+            // PDA is already set from wallet connection
+            await fetchCounterAccount();
             return tx;
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to initialize counter";
@@ -156,9 +271,9 @@ export function useCounterProgram() {
         } finally {
             setIsLoading(false);
         }
-    }, [program, wallet.publicKey, setCounterPubkey]);
+    }, [program, wallet.publicKey, fetchCounterAccount]);
 
-    // Increment the counter
+    // Increment the counter (on base layer)
     const increment = useCallback(async (): Promise<string> => {
         if (!program || !wallet.publicKey || !counterPubkey) {
             throw new Error("Counter not initialized");
@@ -171,7 +286,7 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .increment()
                 .accounts({
-                    counter: counterPubkey,
+                    authority: wallet.publicKey,
                 })
                 .rpc();
 
@@ -185,7 +300,154 @@ export function useCounterProgram() {
         }
     }, [program, wallet.publicKey, counterPubkey]);
 
-    // Decrement the counter
+    // Increment the counter on Ephemeral Rollup
+    const incrementOnER = useCallback(async (): Promise<string> => {
+        if (!program || !erProvider || !wallet.publicKey || !counterPubkey) {
+            throw new Error("Counter not initialized or not delegated");
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // Build transaction using base program
+            let tx = await program.methods
+                .increment()
+                .accounts({
+                    authority: wallet.publicKey,
+                })
+                .transaction();
+
+            // Set up for ER connection
+            tx.feePayer = wallet.publicKey;
+            tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
+            tx = await erProvider.wallet.signTransaction(tx);
+
+            // Send using raw connection
+            const txHash = await erConnection.sendRawTransaction(tx.serialize(), {
+                skipPreflight: true,
+            });
+            await erConnection.confirmTransaction(txHash, "confirmed");
+
+            // Refresh ER counter value
+            if (erProgram) {
+                try {
+                    const account = await erProgram.account.counter.fetch(counterPubkey);
+                    setErCounterValue(BigInt(account.count.toString()));
+                } catch {
+                    // Ignore fetch errors
+                }
+            }
+
+            return txHash;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to increment on ER";
+            setError(message);
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [program, erProvider, erConnection, erProgram, wallet.publicKey, counterPubkey]);
+
+    // Decrement the counter on Ephemeral Rollup
+    const decrementOnER = useCallback(async (): Promise<string> => {
+        if (!program || !erProvider || !wallet.publicKey || !counterPubkey) {
+            throw new Error("Counter not initialized or not delegated");
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // Build transaction using base program
+            let tx = await program.methods
+                .decrement()
+                .accounts({
+                    authority: wallet.publicKey,
+                })
+                .transaction();
+
+            // Set up for ER connection
+            tx.feePayer = wallet.publicKey;
+            tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
+            tx = await erProvider.wallet.signTransaction(tx);
+
+            // Send using raw connection
+            const txHash = await erConnection.sendRawTransaction(tx.serialize(), {
+                skipPreflight: true,
+            });
+            await erConnection.confirmTransaction(txHash, "confirmed");
+
+            // Refresh ER counter value
+            if (erProgram) {
+                try {
+                    const account = await erProgram.account.counter.fetch(counterPubkey);
+                    setErCounterValue(BigInt(account.count.toString()));
+                } catch {
+                    // Ignore fetch errors
+                }
+            }
+
+            return txHash;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to decrement on ER";
+            setError(message);
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [program, erProvider, erConnection, erProgram, wallet.publicKey, counterPubkey]);
+
+    // Set the counter to a specific value on Ephemeral Rollup
+    const setOnER = useCallback(async (value: number): Promise<string> => {
+        if (!program || !erProvider || !wallet.publicKey || !counterPubkey) {
+            throw new Error("Counter not initialized or not delegated");
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // Build transaction using base program
+            let tx = await program.methods
+                .set(new BN(value))
+                .accounts({
+                    authority: wallet.publicKey,
+                })
+                .transaction();
+
+            // Set up for ER connection
+            tx.feePayer = wallet.publicKey;
+            tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
+            tx = await erProvider.wallet.signTransaction(tx);
+
+            // Send using raw connection
+            const txHash = await erConnection.sendRawTransaction(tx.serialize(), {
+                skipPreflight: true,
+            });
+            await erConnection.confirmTransaction(txHash, "confirmed");
+
+            // Refresh ER counter value
+            if (erProgram) {
+                try {
+                    const account = await erProgram.account.counter.fetch(counterPubkey);
+                    setErCounterValue(BigInt(account.count.toString()));
+                } catch {
+                    // Ignore fetch errors
+                }
+            }
+
+            return txHash;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to set on ER";
+            setError(message);
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [program, erProvider, erConnection, erProgram, wallet.publicKey, counterPubkey]);
+
+    // Decrement the counter (on base layer)
     const decrement = useCallback(async (): Promise<string> => {
         if (!program || !wallet.publicKey || !counterPubkey) {
             throw new Error("Counter not initialized");
@@ -198,7 +460,7 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .decrement()
                 .accounts({
-                    counter: counterPubkey,
+                    authority: wallet.publicKey,
                 })
                 .rpc();
 
@@ -212,7 +474,7 @@ export function useCounterProgram() {
         }
     }, [program, wallet.publicKey, counterPubkey]);
 
-    // Set the counter to a specific value
+    // Set the counter to a specific value (on base layer)
     const set = useCallback(async (value: number): Promise<string> => {
         if (!program || !wallet.publicKey || !counterPubkey) {
             throw new Error("Counter not initialized");
@@ -225,7 +487,7 @@ export function useCounterProgram() {
             const tx = await program.methods
                 .set(new BN(value))
                 .accounts({
-                    counter: counterPubkey,
+                    authority: wallet.publicKey,
                 })
                 .rpc();
 
@@ -239,17 +501,169 @@ export function useCounterProgram() {
         }
     }, [program, wallet.publicKey, counterPubkey]);
 
+    // ========================================
+    // Ephemeral Rollups Functions
+    // ========================================
+
+    // Delegate the counter to Ephemeral Rollups
+    const delegate = useCallback(async (): Promise<string> => {
+        if (!program || !wallet.publicKey) {
+            throw new Error("Wallet not connected");
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const tx = await program.methods
+                .delegate()
+                .accounts({
+                    payer: wallet.publicKey,
+                })
+                .rpc({
+                    skipPreflight: true,
+                });
+
+            // Wait a bit for delegation to propagate
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Recheck delegation status
+            await checkDelegationStatus();
+
+            return tx;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to delegate counter";
+            setError(message);
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [program, wallet.publicKey, checkDelegationStatus]);
+
+    // Commit state from ER to base layer (runs on ER)
+    const commit = useCallback(async (): Promise<string> => {
+        if (!program || !erProvider || !wallet.publicKey || !counterPubkey) {
+            throw new Error("Counter not initialized or not delegated");
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // Build transaction using base program
+            let tx = await program.methods
+                .commit()
+                .accounts({
+                    payer: wallet.publicKey,
+                })
+                .transaction();
+
+            // Set up for ER connection
+            tx.feePayer = wallet.publicKey;
+            tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
+            tx = await erProvider.wallet.signTransaction(tx);
+
+            // Send using raw connection
+            const txHash = await erConnection.sendRawTransaction(tx.serialize(), {
+                skipPreflight: true,
+            });
+            await erConnection.confirmTransaction(txHash, "confirmed");
+
+            // Try to get the commitment signature on base layer
+            try {
+                // Dynamic import to avoid Buffer issues at module load time
+                const { GetCommitmentSignature } = await import("@magicblock-labs/ephemeral-rollups-sdk");
+                const txCommitSgn = await GetCommitmentSignature(txHash, erConnection);
+                console.log("Commit signature on base layer:", txCommitSgn);
+            } catch {
+                console.log("GetCommitmentSignature not available (might be expected on localnet)");
+            }
+
+            // Refresh base layer counter value
+            await fetchCounterAccount();
+
+            return txHash;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to commit counter";
+            setError(message);
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [program, erProvider, erConnection, wallet.publicKey, counterPubkey, fetchCounterAccount]);
+
+    // Undelegate the counter from ER (runs on ER)
+    const undelegate = useCallback(async (): Promise<string> => {
+        if (!program || !erProvider || !wallet.publicKey || !counterPubkey) {
+            throw new Error("Counter not initialized or not delegated");
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // Build transaction using base program
+            let tx = await program.methods
+                .undelegate()
+                .accounts({
+                    payer: wallet.publicKey,
+                })
+                .transaction();
+
+            // Set up for ER connection
+            tx.feePayer = wallet.publicKey;
+            tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
+            tx = await erProvider.wallet.signTransaction(tx);
+
+            // Send using raw connection
+            const txHash = await erConnection.sendRawTransaction(tx.serialize(), {
+                skipPreflight: true,
+            });
+            await erConnection.confirmTransaction(txHash, "confirmed");
+
+            // Wait for undelegation to propagate
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Update state
+            setDelegationStatus("undelegated");
+            setErCounterValue(null);
+
+            // Refresh base layer counter value
+            await fetchCounterAccount();
+
+            return txHash;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to undelegate counter";
+            setError(message);
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [program, erProvider, erConnection, wallet.publicKey, counterPubkey, fetchCounterAccount]);
+
     return {
         program,
         counterAccount,
         counterPubkey,
         isLoading,
         error,
+        // Base layer operations
         initialize,
         increment,
         decrement,
         set,
-        setCounterPubkey,
+        // Ephemeral Rollups operations
+        delegate,
+        commit,
+        undelegate,
+        incrementOnER,
+        decrementOnER,
+        setOnER,
+        // Delegation status
+        delegationStatus,
+        erCounterValue,
+        // Utilities
         refetch: fetchCounterAccount,
+        checkDelegation: checkDelegationStatus,
     };
 }

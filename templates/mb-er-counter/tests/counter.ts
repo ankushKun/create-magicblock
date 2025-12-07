@@ -16,7 +16,7 @@ describe("counter", () => {
   const providerEphemeralRollup = new anchor.AnchorProvider(
     new anchor.web3.Connection(
       process.env.EPHEMERAL_PROVIDER_ENDPOINT ||
-      "https://devnet.magicblock.app/",
+      "https://rpc.magicblock.app/devnet",
       {
         wsEndpoint:
           process.env.EPHEMERAL_WS_ENDPOINT || "wss://devnet.magicblock.app/",
