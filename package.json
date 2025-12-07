@@ -1,11 +1,11 @@
 {
-  "name": "create-magic-app",
+  "name": "create-magicblock",
   "version": "0.1.0",
   "description": "Scaffold a solana and magicblock app",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "create-magic-app": "dist/index.js"
+    "create-magicblock": "dist/index.js"
   },
   "scripts": {
     "start": "node dist/index.js",
