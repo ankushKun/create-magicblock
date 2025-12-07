@@ -80,6 +80,10 @@ function cleanupGitignoreFiles() {
 
 async function main() {
     try {
+        // 0. Build the project
+        console.log("🛠️ Building...");
+        execSync("bun run build", { stdio: "inherit" });
+
         // 1. Rename .gitignore -> gitignore
         createGitignoreFiles();
 

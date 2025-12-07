@@ -1,6 +1,6 @@
 {
   "name": "create-magicblock",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Scaffold a solana and magicblock app",
   "type": "module",
   "main": "dist/index.js",
