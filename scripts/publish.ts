@@ -65,9 +65,10 @@ function cleanupGitignoreFiles() {
         // Recurse into subdirectories
         files.forEach(file => {
             if (IGNORE_FOLDERS.includes(file)) return;
+            if (file === "gitignore") return;
 
             const fullPath = path.join(dir, file);
-            if (fs.statSync(fullPath).isDirectory()) {
+            if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
                 scanAndDelete(fullPath);
             }
         });
