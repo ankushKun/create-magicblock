@@ -89,8 +89,13 @@ async function main() {
 
         // 2. Run npm publish
         console.log("\n📦 Publishing...");
-        const args = process.argv.slice(2).join(" ");
-        execSync(`npm publish ${args}`, { stdio: "inherit" });
+        try {
+            execSync("npm whoami", { stdio: "inherit" });
+        } catch (e) {
+            console.log("Not logged in or whoami failed (expected if using OIDC but good to check)");
+        }
+        // const args = process.argv.slice(2).join(" ");
+        execSync(`npm publish`, { stdio: "inherit" });
 
     } catch (error) {
         console.error("\n❌ Publish failed:");
